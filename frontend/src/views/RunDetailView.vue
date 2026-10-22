@@ -7,6 +7,7 @@ import {
 } from '../api'
 import type { CaseStatus, RunAttributions, RunDetail, RunScores, RunStatus } from '../api/types'
 import RadarChart from '../components/RadarChart.vue'
+import AttributionReviewPanel from '../components/AttributionReviewPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -331,6 +332,12 @@ onUnmounted(stopPolling)
         <div v-else class="hint" style="margin-bottom: 18px">
           本次评测未产生根因归因(无明显失分信号)
         </div>
+      </template>
+
+      <!-- 人工复核工作台:run 在 reviewing 状态显示完整交互;已完成的 run 也可以复盘查看历史 -->
+      <template v-if="attributions && run.review_policy !== 'skip' && attributions.total_attributions > 0">
+        <h3 class="section-title">人工复核工作台(FR-08)</h3>
+        <AttributionReviewPanel :run-id="runId" :run-attributions="attributions" />
       </template>
 
       <h3 class="section-title">评测用例执行({{ run.progress.succeeded + run.progress.failed + run.progress.canceled }}/{{ run.progress.total }})</h3>
