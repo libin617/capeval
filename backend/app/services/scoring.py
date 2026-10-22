@@ -433,7 +433,14 @@ def _score_d3(stats: _CaseStats, data_missing: bool = False, testcase: TestCase 
 # ---------- D4 多轮会话一致性(LLM Judge 预留) ----------
 def _semantic_points(testcase: TestCase) -> list[str]:
     """用例级语义验收点,供 LLM Judge 逐条核对的期望结果。"""
-    raw = (testcase.acceptance or {}).get("semantic_points") or []
+    import json as _json
+    acc = testcase.acceptance or {}
+    if isinstance(acc, str):
+        try:
+            acc = _json.loads(acc)
+        except Exception:
+            acc = {}
+    raw = (acc or {}).get("semantic_points") or []
     return [str(p) for p in raw if str(p).strip()]
 
 
