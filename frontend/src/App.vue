@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Monitor, Collection, Files, Connection, VideoPlay, DataAnalysis, TrendCharts, Setting, Bell, User, Cpu, ScaleToOriginal } from '@element-plus/icons-vue'
+import { Monitor, Collection, Files, Connection, VideoPlay, DataAnalysis, TrendCharts, Setting, Bell, User, Cpu, ScaleToOriginal, Warning } from '@element-plus/icons-vue'
 import {
   listNotifications, markAllNotificationsRead, markNotificationRead, listUsers,
 } from './api'
@@ -116,6 +116,9 @@ onBeforeUnmount(() => {
         </el-menu-item>
         <el-menu-item index="/root-causes">
           <el-icon><Connection /></el-icon><span>根因库</span>
+        </el-menu-item>
+        <el-menu-item index="/badcases">
+          <el-icon><Warning /></el-icon><span>BadCase 回流</span>
         </el-menu-item>
         <el-menu-item index="/judge-config">
           <el-icon><Cpu /></el-icon><span>评审模型</span>
