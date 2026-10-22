@@ -254,6 +254,8 @@ Agent 可选择 `host` 或 `docker` 隔离模式。docker 模式下，平台为*
 
 ## 七、使用教程
 
+> 更完整的逐步操作、配置示例与排错说明见 **[使用手册 docs/USER_GUIDE.md](docs/USER_GUIDE.md)**。
+
 ### 0. 推荐上手顺序
 
 ```
@@ -329,7 +331,7 @@ DELETE {endpoint}/sessions/{id}     # 结束会话，释放资源
 | 难度 | 是 | `easy` / `medium` / `hard` |
 | 能力标签 | 是 | 至少一个，用于检索与分维度统计 |
 | 预估时长 | 否 | 单用例预期耗时，用于执行超时与效率观测 |
-| 效率基线 | 否 | 期望 tokens / 秒数，D6 用它计算效率分；不填则 D6 不评分 |
+| 效率基线 | 否 | `{"token_baseline": N}`，D6 用它计算效率分；不填则仅记录消耗、不评分 |
 | 执行方式 | 是 | `仅 Docker` / `仅 Host` / `任意`，默认仅 Docker；创建任务时与 Agent 隔离模式校验兼容 |
 | 镜像 | 条件必填 | 执行方式为 Docker/任意时必填，如 `node:20-slim`、`maven:3.9-eclipse-temurin-17`、`python:3.12-slim`；仅 Host 时忽略 |
 | 附加卷 | 否 | 每行一条「宿主机路径:容器路径」，用于复用依赖缓存，如 `~/.capeval-cache/m2:/root/.m2` |
