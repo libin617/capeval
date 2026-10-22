@@ -91,7 +91,7 @@ async function submitEdit() {
     })
     ElMessage.success('已保存')
     editVisible.value = false
-    await refresh()
+    await refresh(false)
   } catch (e) {
     ElMessage.error((e as Error).message)
   } finally {
@@ -99,13 +99,19 @@ async function submitEdit() {
   }
 }
 
-async function refresh() {
+async function refresh(resetPage = true) {
   try {
     const params: Record<string, string> = {}
     if (statusFilter.value) params.status = statusFilter.value
     if (keyword.value.trim()) params.q = keyword.value.trim()
     runs.value = await listRuns(Object.keys(params).length ? params : undefined)
-    page.value = 1
+    if (resetPage) {
+      page.value = 1
+    } else {
+      // 保护:如果当前页超过新数据总页数(比如筛选后 run 变少),自动 clamp
+      const maxPage = Math.max(1, Math.ceil(runs.value.length / PAGE_SIZE))
+      if (page.value > maxPage) page.value = maxPage
+    }
   } finally {
     loading.value = false
   }
@@ -114,7 +120,7 @@ async function refresh() {
 function setupPolling() {
   stopPolling()
   timer = setInterval(() => {
-    if (runs.value.some((r) => !TERMINAL.includes(r.status) && r.status !== 'draft')) refresh()
+    if (runs.value.some((r) => !TERMINAL.includes(r.status) && r.status !== 'draft')) refresh(false)
   }, 3000)
 }
 
@@ -141,7 +147,7 @@ async function onSubmit(row: RunInfo) {
   try {
     await submitRun(row.id)
     ElMessage.success(`Run #${row.id} 已提交`)
-    await refresh()
+    await refresh(false)
   } catch (e) { ElMessage.error((e as Error).message) }
 }
 
@@ -152,7 +158,7 @@ async function onCancel(row: RunInfo) {
   try {
     await cancelRun(row.id)
     ElMessage.success('已取消')
-    await refresh()
+    await refresh(false)
   } catch (e) { ElMessage.error((e as Error).message) }
 }
 
@@ -160,7 +166,7 @@ async function onRetry(row: RunInfo) {
   try {
     await retryRun(row.id)
     ElMessage.success(`Run #${row.id} 已重新排队(仅重跑失败用例)`)
-    await refresh()
+    await refresh(false)
   } catch (e) { ElMessage.error((e as Error).message) }
 }
 
@@ -174,7 +180,7 @@ async function onDelete(row: RunInfo) {
   try {
     await deleteRun(row.id)
     ElMessage.success('已删除')
-    await refresh()
+    await refresh(false)
   } catch (e) { ElMessage.error((e as Error).message) }
 }
 
