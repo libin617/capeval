@@ -18,3 +18,6 @@ frontend/dist/
 .idea/
 .vscode/
 *.log
+
+# Echo adapter 真实写入文件(设计如此,不是代码)
+backend/echo_output.txt

@@ -318,6 +318,58 @@ class AttributionComment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+# ---------- BadCase 回流(FR-08) ----------
+class BadCase(Base):
+    __tablename__ = "badcases"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # 关联:来自哪次 run / 哪个用例 / 哪次执行 / 哪些 attribution
+    run_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("evaluation_runs.id", ondelete="CASCADE"),
+                                        nullable=False, index=True)
+    testcase_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("testcases.id", ondelete="CASCADE"),
+                                              nullable=False, index=True)
+    case_execution_id: Mapped[int] = mapped_column(BigInteger,
+                                                    ForeignKey("case_executions.id", ondelete="CASCADE"),
+                                                    nullable=False, index=True)
+    attribution_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+
+    # 问题分类(决定回流方向)
+    # agent_bug / case_bug / rootcause_gap / scoring_bug / false_positive / other
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    reason_detail: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # 严重度与归属
+    # critical / high / medium / low
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="medium", index=True)
+    # agent_provider / case_maintainer / platform
+    ownership: Mapped[str] = mapped_column(String(32), nullable=False, default="platform", index=True)
+
+    # 处理状态:open → triaged → fixed / wontfix → resolved
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open", index=True)
+    owner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    solution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # disable_agent / archive_testcase / add_rootcause / fix_scoring / manual
+    solution_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # 回流验证凭证
+    fixed_agent_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    fixed_testcase_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fixed_rootcause_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    verified_run_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    # 审计
+    created_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(),
+                                                  onupdate=func.now(), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # ---- 关系(可选,方便 API 组装) ----
+    run: Mapped["EvaluationRun | None"] = relationship("EvaluationRun")
+    testcase: Mapped["TestCase | None"] = relationship("TestCase")
+    case_execution: Mapped["CaseExecution | None"] = relationship("CaseExecution")
+
+
 # ---------- LLM-as-Judge 评审模型配置(FR-05,支持多套配置) ----------
 class LlmJudgeConfig(Base):
     __tablename__ = "llm_judge_configs"

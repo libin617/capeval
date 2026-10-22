@@ -530,6 +530,80 @@ class AttributionReviewIn(BaseModel):
     reviewed_by: str = "evaluator"
 
 
+# ---------- FR-08:BadCase 回流 ----------
+class BadCaseCreateIn(BaseModel):
+    run_id: int
+    testcase_id: int
+    case_execution_id: int
+    attribution_ids: list[int] | None = None
+    reason: Literal["agent_bug", "case_bug", "rootcause_gap", "scoring_bug",
+                    "false_positive", "other"]
+    reason_detail: str = Field(min_length=1, max_length=4000)
+    severity: Literal["critical", "high", "medium", "low"] = "medium"
+    ownership: Literal["agent_provider", "case_maintainer", "platform"] = "platform"
+
+
+class BadCaseBatchFromReviewIn(BaseModel):
+    """从复核工作台批量提 BadCase(一组 case_execution_id)。"""
+    run_id: int
+    case_execution_ids: list[int]  # 这些执行对应的 case 整体提为 BadCase
+    reason: Literal["agent_bug", "case_bug", "rootcause_gap", "scoring_bug",
+                    "false_positive", "other"]
+    reason_detail: str = Field(min_length=1, max_length=4000)
+    severity: Literal["critical", "high", "medium", "low"] = "medium"
+    ownership: Literal["agent_provider", "case_maintainer", "platform"] = "platform"
+
+
+class BadCaseUpdateIn(BaseModel):
+    """处理 BadCase:指派/改状态/写解决方案/标记已解决。"""
+    status: Literal["open", "triaged", "fixed", "wontfix", "resolved"] | None = None
+    owner: str | None = None
+    solution: str | None = None
+    solution_type: Literal["disable_agent", "archive_testcase", "add_rootcause",
+                           "fix_scoring", "manual"] | None = None
+    fixed_agent_version: str | None = None
+    fixed_testcase_version: int | None = None
+    fixed_rootcause_id: int | None = None
+    verified_run_id: int | None = None
+
+
+class BadCaseOut(BaseModel):
+    id: int
+    run_id: int
+    run_name: str = ""
+    testcase_id: int
+    testcase_title: str = ""
+    case_execution_id: int
+    case_status: str = ""
+    attribution_ids: list[int] | None = None
+    reason: str
+    reason_detail: str
+    severity: str
+    ownership: str
+    status: str
+    owner: str | None = None
+    solution: str | None = None
+    solution_type: str | None = None
+    fixed_agent_version: str | None = None
+    fixed_testcase_version: int | None = None
+    fixed_rootcause_id: int | None = None
+    verified_run_id: int | None = None
+    created_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class BadCaseListOut(BaseModel):
+    items: list[BadCaseOut] = []
+    total: int = 0
+    status_dist: dict[str, int] = {}   # open/triaged/fixed/wontfix/resolved
+    reason_dist: dict[str, int] = {}   # 按 reason 分组
+    severity_dist: dict[str, int] = {}
+
+
 # ---------- M6:通知/权限/评论/保留策略/统计 ----------
 class NotificationOut(BaseModel):
     id: int

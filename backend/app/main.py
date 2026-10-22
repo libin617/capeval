@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, agents, casesets, config, judge, notifications, reports, runs, stats, testcases
+from app.api import admin, agents, badcases, casesets, config, judge, notifications, reports, runs, stats, testcases
 from app.core.config import get_settings
 from app.services.scheduler import dispatcher
 
@@ -39,6 +39,7 @@ app.include_router(notifications.router)
 app.include_router(admin.router)
 app.include_router(stats.router)
 app.include_router(judge.router)
+app.include_router(badcases.router)
 
 
 @app.get("/api/health")

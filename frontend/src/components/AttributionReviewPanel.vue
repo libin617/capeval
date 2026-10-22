@@ -2,10 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  getExecutionAttributions, listRootCauses, reviewAttribution,
+  createBadCase, getExecutionAttributions, listRootCauses, reviewAttribution,
 } from '../api'
 import type {
-  AttributionInfo, AttributionReviewPayload, CaseAttribution, RootCause, RunAttributions,
+  AttributionInfo, AttributionReviewPayload, BadCaseOwnership, BadCaseReason, BadCaseSeverity,
+  CaseAttribution, RootCause, RunAttributions,
 } from '../api/types'
 
 const props = defineProps<{
@@ -27,6 +28,75 @@ const correctDialog = ref(false)
 const correctingAttr = ref<AttributionInfo | null>(null)
 const correctingNote = ref('')
 const rootCauseFilter = ref('')
+
+// BadCase 对话框
+const badCaseDialog = ref(false)
+const badCaseTargetExecId = ref<number | null>(null)
+const badCaseReason = ref<BadCaseReason>('agent_bug')
+const badCaseSeverity = ref<BadCaseSeverity>('high')
+const badCaseOwnership = ref<BadCaseOwnership>('platform')
+const badCaseDetail = ref('')
+
+const BADCASE_REASON_META: Record<BadCaseReason, { label: string; hint: string }> = {
+  agent_bug: { label: 'Agent 能力缺陷', hint: 'Agent 在该场景下本身能力不足或行为异常,回 Agent 方改进' },
+  case_bug: { label: '评测用例设计缺陷', hint: '验收命令错/gold_patch 错/语义要点错,回用例维护方修正' },
+  rootcause_gap: { label: '根因库缺口', hint: '归因引擎未命中正确根因,回根因库增补条目' },
+  scoring_bug: { label: '评分口径问题', hint: '评分规则给错分,回评分规则修正' },
+  false_positive: { label: '归因误报', hint: '复核工作台已标记误报的 attr 汇总' },
+  other: { label: '其他', hint: '以上都不是,请在详细说明里描述' },
+}
+
+const BADCASE_SEVERITY_META: Record<BadCaseSeverity, { label: string; type: 'success' | 'warning' | 'danger' | 'info' }> = {
+  critical: { label: '严重', type: 'danger' },
+  high: { label: '高', type: 'warning' },
+  medium: { label: '中', type: 'info' },
+  low: { label: '低', type: 'success' },
+}
+
+const BADCASE_OWNERSHIP_META: Record<BadCaseOwnership, string> = {
+  agent_provider: 'Agent 方',
+  case_maintainer: '用例维护方',
+  platform: '平台方',
+}
+
+function openBadCase(cg: { execution_id: number; testcase_title: string; attrs: AttributionInfo[] }) {
+  badCaseTargetExecId.value = cg.execution_id
+  // 预填说明:列出关联的根因判定
+  const rcList = cg.attrs.map((a) => `${a.rootcause.code} ${a.rootcause.name}(conf=${(a.confidence * 100).toFixed(0)}%)`).join('; ')
+  badCaseDetail.value = `用例「${cg.testcase_title}」关联根因:${rcList}\n\n问题描述:`
+  badCaseReason.value = 'agent_bug'
+  badCaseSeverity.value = 'high'
+  badCaseOwnership.value = 'platform'
+  badCaseDialog.value = true
+}
+
+async function submitBadCase() {
+  if (!badCaseTargetExecId.value) return
+  const detail = badCaseDetail.value.trim()
+  if (!detail || detail.length < 5) {
+    ElMessage.warning('请填写至少 5 个字符的详细说明')
+    return
+  }
+  try {
+    await createBadCase({
+      run_id: props.runId,
+      // testcase_id 从 runAttributions.cases 里找
+      testcase_id: props.runAttributions.cases.find(
+        (c) => c.execution_id === badCaseTargetExecId.value,
+      )?.testcase_id ?? 0,
+      case_execution_id: badCaseTargetExecId.value,
+      attribution_ids: caseAttrs.value[badCaseTargetExecId.value]?.map((a) => a.id) || null,
+      reason: badCaseReason.value,
+      reason_detail: detail,
+      severity: badCaseSeverity.value,
+      ownership: badCaseOwnership.value,
+    })
+    ElMessage.success('已提为 BadCase')
+    badCaseDialog.value = false
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
 
 // 已加载标记：避免重复请求
 const loaded = ref(false)
@@ -307,6 +377,8 @@ function confidenceTag(c: number): 'success' | 'warning' | 'danger' {
                 :type="REVIEW_STATUS_META[s].type">
                 {{ REVIEW_STATUS_META[s].label }} {{ cg.attrs.filter((a) => a.review_status === s).length }}
               </el-tag>
+              <el-button size="small" type="danger" plain style="margin-left: 8px"
+                @click="openBadCase(cg)">📌 提为 BadCase</el-button>
             </span>
           </div>
         </template>
@@ -427,6 +499,43 @@ function confidenceTag(c: number): 'success' | 'warning' | 'danger' {
         <el-button @click="correctDialog = false">取消</el-button>
       </template>
     </el-dialog>
+
+    <!-- BadCase 对话框 -->
+    <el-dialog v-model="badCaseDialog" width="600px" title="标记为 BadCase(回流到 Agent/用例/根因库)">
+      <el-form label-position="top">
+        <el-form-item label="问题分类(决定回流方向)">
+          <el-radio-group v-model="badCaseReason" size="default">
+            <el-radio-button v-for="(m, k) in BADCASE_REASON_META" :key="k" :value="k as BadCaseReason"
+              :title="m.hint">
+              {{ m.label }}
+            </el-radio-button>
+          </el-radio-group>
+          <div class="bc-hint">{{ BADCASE_REASON_META[badCaseReason].hint }}</div>
+        </el-form-item>
+        <div class="bc-row">
+          <el-form-item label="严重度" style="flex: 1">
+            <el-select v-model="badCaseSeverity" style="width: 100%">
+              <el-option v-for="(m, k) in BADCASE_SEVERITY_META" :key="k" :label="m.label"
+                :value="k" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="归属方" style="flex: 1">
+            <el-select v-model="badCaseOwnership" style="width: 100%">
+              <el-option v-for="(label, k) in BADCASE_OWNERSHIP_META" :key="k" :label="label"
+                :value="k" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item label="详细说明">
+          <el-input v-model="badCaseDetail" type="textarea" :rows="5" maxlength="4000"
+            show-word-limit placeholder="请描述具体问题现象、期望行为、复现条件..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="badCaseDialog = false">取消</el-button>
+        <el-button type="primary" @click="submitBadCase">确认提交</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -516,4 +625,6 @@ function confidenceTag(c: number): 'success' | 'warning' | 'danger' {
 .rc-empty { font-size: 13px; color: var(--el-text-color-placeholder); padding: 12px; text-align: center; }
 
 .review-empty { text-align: center; padding: 32px; color: var(--el-text-color-placeholder); font-size: 14px; }
+.bc-row { display: flex; gap: 12px; }
+.bc-hint { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; padding: 4px 8px; background: var(--el-color-info-light-9); border-radius: 4px; }
 </style>

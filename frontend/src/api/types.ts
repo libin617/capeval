@@ -708,3 +708,77 @@ export interface JudgeTestResult {
   message: string
   latency_ms: number
 }
+
+// ---- BadCase 回流 (FR-08) ----
+
+export type BadCaseReason = 'agent_bug' | 'case_bug' | 'rootcause_gap' | 'scoring_bug' | 'false_positive' | 'other'
+export type BadCaseSeverity = 'critical' | 'high' | 'medium' | 'low'
+export type BadCaseOwnership = 'agent_provider' | 'case_maintainer' | 'platform'
+export type BadCaseStatus = 'open' | 'triaged' | 'fixed' | 'wontfix' | 'resolved'
+export type BadCaseSolutionType = 'disable_agent' | 'archive_testcase' | 'add_rootcause' | 'fix_scoring' | 'manual'
+
+export interface BadCaseInfo {
+  id: number
+  run_id: number
+  run_name: string
+  testcase_id: number
+  testcase_title: string
+  case_execution_id: number
+  case_status: string
+  attribution_ids: number[] | null
+  reason: BadCaseReason
+  reason_detail: string
+  severity: BadCaseSeverity
+  ownership: BadCaseOwnership
+  status: BadCaseStatus
+  owner: string | null
+  solution: string | null
+  solution_type: BadCaseSolutionType | null
+  fixed_agent_version: string | null
+  fixed_testcase_version: number | null
+  fixed_rootcause_id: number | null
+  verified_run_id: number | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  resolved_at: string | null
+}
+
+export interface BadCaseCreatePayload {
+  run_id: number
+  testcase_id: number
+  case_execution_id: number
+  attribution_ids?: number[] | null
+  reason: BadCaseReason
+  reason_detail: string
+  severity?: BadCaseSeverity
+  ownership?: BadCaseOwnership
+}
+
+export interface BadCaseBatchPayload {
+  run_id: number
+  case_execution_ids: number[]
+  reason: BadCaseReason
+  reason_detail: string
+  severity?: BadCaseSeverity
+  ownership?: BadCaseOwnership
+}
+
+export interface BadCaseUpdatePayload {
+  status?: BadCaseStatus
+  owner?: string | null
+  solution?: string | null
+  solution_type?: BadCaseSolutionType | null
+  fixed_agent_version?: string | null
+  fixed_testcase_version?: number | null
+  fixed_rootcause_id?: number | null
+  verified_run_id?: number | null
+}
+
+export interface BadCaseList {
+  items: BadCaseInfo[]
+  total: number
+  status_dist: Record<string, number>
+  reason_dist: Record<string, number>
+  severity_dist: Record<string, number>
+}

@@ -1,7 +1,8 @@
 import { http } from './client'
 import type {
   AdapterInfo, AgentCreatePayload, AgentInfo, AttributionCommentInfo, AttributionInfo,
-  AttributionReviewPayload, CaseSet, CompareResult, DimensionScoreInfo, ExecutionDetail,
+  AttributionReviewPayload, BadCaseBatchPayload, BadCaseCreatePayload, BadCaseInfo, BadCaseList,
+  BadCaseUpdatePayload, CaseSet, CompareResult, DimensionScoreInfo, ExecutionDetail,
   FalsePositiveStats, JudgeConfig, JudgeConfigPayload, JudgeTestResult, LibraryVersionInfo,
   NotificationList, ReportPayload, RetentionPurgeResult,
   RetentionStats, RootCause, RootCauseCreatePayload, RootCauseUpdatePayload, RootCauseWriteResult,
@@ -150,4 +151,18 @@ export const testJudgeConfig = (p: {
 export const setVersionJudgeConfig = (setId: number, versionId: number, judgeConfigId: number | null) =>
   http.put(`/casesets/${setId}/versions/${versionId}/judge-config`, { judge_config_id: judgeConfigId })
     .then((r) => r.data)
+
+// BadCase 回流管理(FR-08)
+export const listBadCases = (params?: Record<string, string | number>) =>
+  http.get<BadCaseList>('/badcases', { params }).then((r) => r.data)
+export const getBadCase = (id: number) => http.get<BadCaseInfo>(`/badcases/${id}`).then((r) => r.data)
+export const createBadCase = (p: BadCaseCreatePayload) =>
+  http.post<BadCaseInfo>('/badcases', p).then((r) => r.data)
+export const batchCreateBadCases = (p: BadCaseBatchPayload) =>
+  http.post<BadCaseInfo[]>('/badcases/batch-from-review', p).then((r) => r.data)
+export const updateBadCase = (id: number, p: BadCaseUpdatePayload) =>
+  http.patch<BadCaseInfo>(`/badcases/${id}`, p).then((r) => r.data)
+export const deleteBadCase = (id: number) => http.delete(`/badcases/${id}`)
+export const autoFixBadCase = (id: number) =>
+  http.post<BadCaseInfo>(`/badcases/${id}/auto-fix`).then((r) => r.data)
 
