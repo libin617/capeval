@@ -55,6 +55,14 @@ npm run dev                   # http://127.0.0.1:5173
 
 打开 `http://127.0.0.1:5173`，按 **Agent 管理 → 评测用例 → 评测集 → 评测任务** 的顺序即可完成第一轮评测。API 文档在 `http://127.0.0.1:8000/api/docs`。
 
+## 界面预览
+
+| 评测任务 | 轨迹回放(Docker 容器可见) |
+| --- | --- |
+| ![评测任务](docs/screenshots/runs.png) | ![轨迹回放](docs/screenshots/trace.png) |
+
+![评测报告](docs/screenshots/report.png)
+
 ## 目录
 
 - [一、项目简介](#一项目简介)
