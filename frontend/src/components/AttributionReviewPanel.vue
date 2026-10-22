@@ -19,8 +19,8 @@ const rootCauses = ref<RootCause[]>([])
 // 逐 case 的完整 attr 列表（key=execution_id）
 const caseAttrs = ref<Record<number, AttributionInfo[]>>({})
 const loading = ref(true)
-// 展开的 case
-const expandedCases = ref<Set<number>>(new Set())
+// 展开的 case(Element Plus el-collapse 需要数组)
+const expandedCases = ref<number[]>([])
 // 证据链展开的 attr
 const expandedEvidence = ref<Set<number>>(new Set())
 // 改判对话框
@@ -32,6 +32,7 @@ const rootCauseFilter = ref('')
 // BadCase 对话框
 const badCaseDialog = ref(false)
 const badCaseTargetExecId = ref<number | null>(null)
+const badCaseTargetTestcaseId = ref<number | null>(null)
 const badCaseReason = ref<BadCaseReason>('agent_bug')
 const badCaseSeverity = ref<BadCaseSeverity>('high')
 const badCaseOwnership = ref<BadCaseOwnership>('platform')
@@ -59,8 +60,9 @@ const BADCASE_OWNERSHIP_META: Record<BadCaseOwnership, string> = {
   platform: '平台方',
 }
 
-function openBadCase(cg: { execution_id: number; testcase_title: string; attrs: AttributionInfo[] }) {
+function openBadCase(cg: CaseAttribution & { attrs: AttributionInfo[] }) {
   badCaseTargetExecId.value = cg.execution_id
+  badCaseTargetTestcaseId.value = cg.testcase_id
   // 预填说明:列出关联的根因判定
   const rcList = cg.attrs.map((a) => `${a.rootcause.code} ${a.rootcause.name}(conf=${(a.confidence * 100).toFixed(0)}%)`).join('; ')
   badCaseDetail.value = `用例「${cg.testcase_title}」关联根因:${rcList}\n\n问题描述:`
@@ -71,7 +73,10 @@ function openBadCase(cg: { execution_id: number; testcase_title: string; attrs: 
 }
 
 async function submitBadCase() {
-  if (!badCaseTargetExecId.value) return
+  if (!badCaseTargetExecId.value || !badCaseTargetTestcaseId.value) {
+    ElMessage.error('BadCase 目标信息缺失,请重新打开对话框')
+    return
+  }
   const detail = badCaseDetail.value.trim()
   if (!detail || detail.length < 5) {
     ElMessage.warning('请填写至少 5 个字符的详细说明')
@@ -80,10 +85,7 @@ async function submitBadCase() {
   try {
     await createBadCase({
       run_id: props.runId,
-      // testcase_id 从 runAttributions.cases 里找
-      testcase_id: props.runAttributions.cases.find(
-        (c) => c.execution_id === badCaseTargetExecId.value,
-      )?.testcase_id ?? 0,
+      testcase_id: badCaseTargetTestcaseId.value,
       case_execution_id: badCaseTargetExecId.value,
       attribution_ids: caseAttrs.value[badCaseTargetExecId.value]?.map((a) => a.id) || null,
       reason: badCaseReason.value,
@@ -119,7 +121,7 @@ async function load() {
     const firstPending = props.runAttributions.cases.find(
       (c: CaseAttribution) => (caseAttrs.value[c.execution_id] || []).some((a) => a.review_status === 'pending'),
     )
-    if (firstPending) expandedCases.value.add(firstPending.execution_id)
+    if (firstPending) expandedCases.value = [firstPending.execution_id]
     loaded.value = true
   } finally {
     loading.value = false
