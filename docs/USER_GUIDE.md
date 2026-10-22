@@ -482,6 +482,7 @@ draft → queued → running → scoring → attributing → reviewing → compl
 | 事项 | 操作 |
 | --- | --- |
 | 数据库升级 | `alembic upgrade head` |
+| 表结构与字段说明 | 见 [数据库表结构](DATABASE.md)（含 ER 图、JSON 结构与常用查询） |
 | 轨迹保留 | 默认 180 天；被证据链引用的片段豁免 |
 | 手动清理 | `POST /api/admin/retention/purge` 或「系统管理」页 |
 | 通知 | 任务状态、校验失败、Agent 异常、群体失败；列表 15 秒轮询 |

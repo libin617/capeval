@@ -485,6 +485,8 @@ DELETE {endpoint}/sessions/{id}     # 结束会话，释放资源
 | 测试 | pytest · httpx(TestClient) | 后端接口/流程用例 |
 | 报告导出 | 自包含 HTML · 无头 Chrome 打印 PDF | 可离线打开，支持分享链接 |
 
+> 数据模型共 18 张业务表 + 1 张迁移表：字段说明、JSON 结构示例、ER 图、枚举取值与常用查询见 [数据库表结构](docs/DATABASE.md)。
+
 ---
 
 ## 九、系统架构
