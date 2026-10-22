@@ -23,14 +23,17 @@ from sqlalchemy.orm import Session
 
 from app.adapters.base import AdapterAuthError, BaseAdapter, SessionHandle, make_preexec_limits
 from app.adapters.registry import get_adapter
+from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.core.security import decrypt_credential
 from app.models import Agent, CaseExecution, EvaluationRun, TestCase, TraceEvent
 from app.services import attribution, notify, review, scoring
 
-PAYLOAD_MAX_CHARS = 8000
-COMMAND_TIMEOUT_SECONDS = 120
-INSTALL_TIMEOUT_SECONDS = 600  # 依赖安装(如 npm install / mvn install)通常耗时较长
+_settings = get_settings()
+# 模块级常量包装 settings,便于单测 mock 和业务代码引用;默认值在 config.py 中维护
+PAYLOAD_MAX_CHARS = _settings.trace_payload_max_chars
+COMMAND_TIMEOUT_SECONDS = _settings.command_timeout_seconds
+INSTALL_TIMEOUT_SECONDS = _settings.install_timeout_seconds
 
 
 class CaseFailed(Exception):
@@ -142,10 +145,11 @@ def _docker_start_container(workdir: str, limits: dict[str, Any], testcase: Test
     导致「装完却测不到」。改为一个用例一个容器、docker exec 逐条执行,用例结束统一删除。
     """
     opts, image = _docker_options(workdir, limits, testcase)
-    name = f"capeval-case-{uuid.uuid4().hex[:12]}"
+    name = f"{_settings.container_name_prefix}{uuid.uuid4().hex[:12]}"
     cmd = ["docker", "run", "-d", "--rm", "--name", name, *opts,
-           image, "sh", "-c", "while true; do sleep 3600; done"]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)  # noqa: S603
+           image, "sh", "-c", _settings.container_keepalive_cmd]
+    proc = subprocess.run(cmd, capture_output=True, text=True,
+                          timeout=_settings.docker_run_timeout_seconds, check=False)  # noqa: S603
     if proc.returncode != 0:
         detail = ((proc.stderr or "") + (proc.stdout or "")).strip()[-300:]
         raise CaseFailed(f"Docker 容器启动失败(镜像 {image}): {detail}")
@@ -156,7 +160,8 @@ def _docker_remove_container(container_id: str) -> None:
     """强制删除用例容器;清理失败不影响用例结论。"""
     try:
         subprocess.run(["docker", "rm", "-f", container_id],  # noqa: S603
-                       capture_output=True, text=True, timeout=30, check=False)
+                       capture_output=True, text=True,
+                       timeout=_settings.docker_rm_timeout_seconds, check=False)
     except Exception:  # noqa: BLE001
         pass
 
@@ -217,15 +222,15 @@ def _execute_case(db: Session, run: EvaluationRun, case_exec: CaseExecution,
     db.commit()
 
     ctx = _CaseContext(db, case_exec, agent.cost_params)
-    workdir = tempfile.mkdtemp(prefix=f"capeval-run{run.id}-case{case_exec.id}-")
+    workdir = tempfile.mkdtemp(prefix=f"{_settings.temp_dir_prefix}run{run.id}-case{case_exec.id}-")
     started = time.monotonic()
     adapter: BaseAdapter | None = None
     session: SessionHandle | None = None
     container_id: str | None = None
     limits = agent.resource_limits or {}
     isolation = str(limits.get("isolation_mode") or "host")
-    max_turns = int(limits.get("max_turns", 100))
-    max_seconds = float(limits.get("max_case_minutes", 30)) * 60
+    max_turns = int(limits.get("max_turns", _settings.default_max_turns))
+    max_seconds = float(limits.get("max_case_minutes", _settings.default_case_minutes)) * 60
     max_cost = float(limits.get("max_case_cost", 0) or 0)
 
     try:
@@ -257,7 +262,8 @@ def _execute_case(db: Session, run: EvaluationRun, case_exec: CaseExecution,
                 ctx.emit("system", {"kind": "max_turns_exceeded", "max_turns": max_turns})
                 raise CaseFailed(f"超出最大轮次限制({max_turns})")
             if time.monotonic() - started > max_seconds:
-                ctx.emit("system", {"kind": "case_timeout", "max_case_minutes": limits.get("max_case_minutes", 30)})
+                ctx.emit("system", {"kind": "case_timeout",
+                                    "max_case_minutes": limits.get("max_case_minutes", _settings.default_case_minutes)})
                 raise CaseFailed("用例执行超时")
             prompt_text = str(turn.get("message", ""))
             # 记录投递给模型的原始 Prompt(角色 user),与模型回答成对展示

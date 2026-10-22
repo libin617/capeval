@@ -9,11 +9,15 @@ from __future__ import annotations
 import threading
 import traceback
 
+from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.models import EvaluationRun
 from app.services.executor import execute_run
 
-POLL_INTERVAL_SECONDS = 2.0
+_settings = get_settings()
+
+# 后台调度器轮询间隔(秒),默认 2 秒;单测可直接覆盖模块级变量 POLL_INTERVAL_SECONDS
+POLL_INTERVAL_SECONDS = _settings.scheduler_poll_seconds
 
 
 class Dispatcher:

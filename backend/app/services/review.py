@@ -17,9 +17,14 @@ from sqlalchemy.orm import Session
 
 from app.models import Attribution, CaseExecution, EvaluationRun, Report
 from app.services import notify
+from app.core.config import get_settings
 
-LOW_CONFIDENCE = 0.7
-SAMPLE_RATIO = 0.5
+_settings = get_settings()
+
+# 低置信度阈值:归因 confidence 低于该值即进入人工复核(不抽样);可全局调整,也考虑后续扩展为 Run 级覆盖
+LOW_CONFIDENCE = _settings.review_low_confidence
+# sample 抽样策略下,低置信度 / LLM 结论之外的剩余随机抽样比例
+SAMPLE_RATIO = _settings.review_sample_ratio
 
 
 def _attributions(db: Session, run_id: int) -> list[Attribution]:

@@ -15,6 +15,10 @@ from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+
+_settings = get_settings()
+
 # Judge 评审上下文:轨迹事件摘要 + 用例信息,由评分引擎组装
 JudgeContext = dict[str, Any]
 
@@ -165,7 +169,9 @@ class HttpJudge:
             "并作为评分的重要依据。\n"
             + OUTPUT_SCHEMA
         )
-        user_prompt = "执行轨迹摘要如下(JSON):\n" + json.dumps(context, ensure_ascii=False, default=str)[:12000]
+        user_prompt = ("执行轨迹摘要如下(JSON):\n"
+                       + json.dumps(context, ensure_ascii=False, default=str)
+                       [:_settings.judge_context_max_chars])
         try:
             raw = self._chat(system_prompt, user_prompt)
         except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, json.JSONDecodeError):

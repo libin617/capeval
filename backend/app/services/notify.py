@@ -14,9 +14,20 @@ from sqlalchemy.orm import Session
 from app.models import (
     Agent, Attribution, CaseExecution, DimensionScore, EvaluationRun, Notification, RootCause, User,
 )
+from app.core.config import get_settings
 
-REVIEW_OVERDUE_DAYS = 3  # PRD:超 3 个工作日;MVP 简化为 3 个自然日
+_settings = get_settings()
+
+# 复核待办超期天数:Run 提交 reviewing 后超过该天数仍未完成复核 → 通知创建人 + evaluator
+REVIEW_OVERDUE_DAYS = _settings.review_overdue_days
 REVIEW_OVERDUE_DEDUPE = "review_overdue:{run_id}"
+
+# RC-10 集体性失败探测阈值:
+# 同一用例在 ≥RC10_MIN_AGENTS 个不同 Agent 的 Run 中失分(D1<RC10_D1_FAIL_SCORE 或执行失败),
+# 且根因各异(主根因 ≥RC10_MIN_DISTINCT_ROOTCAUSES 种) → 建议用例维护者核查
+RC10_MIN_AGENTS = _settings.rc10_min_agents
+RC10_MIN_DISTINCT_ROOTCAUSES = _settings.rc10_min_distinct_rootcauses
+RC10_D1_FAIL_SCORE = _settings.rc10_d1_fail_score
 
 
 def _recipients_by_role(db: Session, role: str) -> list[str]:
@@ -79,17 +90,17 @@ def notify_verify_failed(db: Session, agent) -> None:
 
 
 def detect_collective_failure(db: Session, run: EvaluationRun) -> None:
-    """集体性失败探测(PRD FR-06):同一用例在 ≥3 个不同 Agent 的 Run 中均失分且根因各异
+    """集体性失败探测(PRD FR-06):同一用例在 ≥N 个不同 Agent 的 Run 中均失分且根因各异
     → 建议 RC-10 候选并通知用例维护者(evaluator)。幂等:dedupe_key=rc10:{testcase_id}。"""
     cases = db.query(CaseExecution).filter_by(run_id=run.id).all()
     if not cases:
         return
     for ce in cases:
-        # 失分定义:执行失败,或 D1 代码正确性 < 3(0-5 制)
+        # 失分定义:执行失败,或 D1 代码正确性低于阈值(默认 3.0)
         failing = ce.status == "failed"
         if not failing:
             d1 = db.query(DimensionScore).filter_by(execution_id=ce.id, dimension="D1").first()
-            failing = d1 is not None and d1.score < 3.0
+            failing = d1 is not None and d1.score < RC10_D1_FAIL_SCORE
         if not failing:
             continue
         # 历史上该用例在其它 Run(不同 Agent)中的失分情况
@@ -108,13 +119,13 @@ def detect_collective_failure(db: Session, run: EvaluationRun) -> None:
         agent_ids = {r.agent_id for _, r, _, _ in others}
         codes = {rc.code for _, _, _, rc in others}
         distinct_agents = len(agent_ids | {run.agent_id})
-        # 根因各异:含本次至少出现 ≥2 种不同主根因
+        # 根因各异:含本次至少出现 ≥N 种不同主根因
         my_primary = (
             db.query(RootCause).join(Attribution, Attribution.rootcause_id == RootCause.id)
             .filter(Attribution.execution_id == ce.id, Attribution.is_primary.is_(True)).first()
         )
         all_codes = set(codes) | ({my_primary.code} if my_primary else set())
-        if distinct_agents < 3 or len(all_codes) < 2:
+        if distinct_agents < RC10_MIN_AGENTS or len(all_codes) < RC10_MIN_DISTINCT_ROOTCAUSES:
             continue
         for username in _recipients_by_role(db, "evaluator"):
             notify(db, username, "rc10_candidate",

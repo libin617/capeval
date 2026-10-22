@@ -14,9 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from app.adapters.base import make_preexec_limits
+from app.core.config import get_settings
 
-INSTALL_TIMEOUT = 600
-COMMAND_TIMEOUT = 120
+_settings = get_settings()
+# 与 executor 共用同一套超时口径,默认值统一在 config.py 维护
+INSTALL_TIMEOUT = _settings.install_timeout_seconds
+COMMAND_TIMEOUT = _settings.command_timeout_seconds
 
 
 def _restore_files(workdir: str, files: dict[str, str]) -> None:
@@ -57,7 +60,7 @@ def run_self_check(testcase: Any) -> dict[str, Any]:
     env_def = testcase.env_def or {}
     acceptance = testcase.acceptance or {}
 
-    workdir = tempfile.mkdtemp(prefix="capeval-selfcheck-")
+    workdir = tempfile.mkdtemp(prefix=f"{_settings.temp_dir_prefix}selfcheck-")
     result: dict[str, Any] = {
         "passed": False, "stage": "init",
         "file_count": len(files),

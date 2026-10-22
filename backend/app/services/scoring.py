@@ -21,6 +21,9 @@ from sqlalchemy.orm import Session
 
 from app.models import CaseExecution, DimensionScore, Report, TestCase, TraceEvent
 from app.services.judge import get_judge, resolve_for_run
+from app.core.config import get_settings
+
+_settings = get_settings()
 
 DIMENSIONS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"]
 QUALITY_DIMS = ["D1", "D2", "D3", "D4", "D5", "D7", "D8"]
@@ -246,7 +249,7 @@ def _score_d3(stats: _CaseStats, data_missing: bool = False) -> _DimResult:
     for t in stats.tool_calls:
         key = f"{t.get('name', '')}:{json.dumps(t.get('args'), ensure_ascii=False, sort_keys=True, default=str)}"
         seen[key] = seen.get(key, 0) + 1
-    repeated = {k: c for k, c in seen.items() if c >= 3}
+    repeated = {k: c for k, c in seen.items() if c >= _settings.tool_call_repeat_threshold}
     if repeated:
         worst = max(repeated.values())
         score -= 1.0
@@ -352,17 +355,19 @@ def _score_d6(stats: _CaseStats, case_exec: CaseExecution, testcase: TestCase,
                                           "API 型未上报 token 用量,数据缺失降级", 0)],
                           stats=base_stats, data_missing=True)
     ratio = actual / float(baseline) if float(baseline) > 0 else float("inf")
-    if ratio <= 1.2:
+    # D6 分档:bands 默认 [1.2, 2.0, 3.0, 4.0] 对应 5/4/3/2/1 分,可通过 settings.d6_ratio_bands 调整
+    bands = list(_settings.d6_ratio_bands)
+    if ratio <= bands[0]:
         score = 5.0
-    elif ratio <= 2.0:
+    elif len(bands) > 1 and ratio <= bands[1]:
         score = 4.0
-    elif ratio <= 3.0:
+    elif len(bands) > 2 and ratio <= bands[2]:
         score = 3.0
-    elif ratio <= 4.0:
+    elif len(bands) > 3 and ratio <= bands[3]:
         score = 2.0
     else:
         score = 1.0
-    verdict = "pass" if ratio <= 1.2 else ("warn" if ratio <= 2.0 else "fail")
+    verdict = "pass" if ratio <= bands[0] else ("warn" if (len(bands) > 1 and ratio <= bands[1]) else "fail")
     return _DimResult(score, signals=[Signal(
         "token_efficiency", verdict,
         f"实际 {actual} tokens / 基线 {baseline} = {ratio:.2f}x", 5.0 - score)],

@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from app.adapters.base import AdapterAuthError, AdapterEvent, BaseAdapter, SessionHandle, make_preexec_limits
+from app.core.config import get_settings
+
+_settings = get_settings()
 
 _session_seq = itertools.count(1)
 
@@ -96,7 +99,8 @@ class GenericCliAdapter(BaseAdapter):
             raise ValueError("adapter_config.start_command 未配置")
         probe: list[str] = self.config.get("probe_command") or cmd[:1] + ["--version"]
         proc = subprocess.run(
-            probe, cwd=workdir or None, capture_output=True, text=True, timeout=30, check=False,
+            probe, cwd=workdir or None, capture_output=True, text=True,
+            timeout=_settings.smoke_timeout_seconds, check=False,
         )
         if proc.returncode != 0:
             raise RuntimeError(f"探针命令退出码 {proc.returncode}: {(proc.stderr or proc.stdout)[:300]}")
@@ -129,7 +133,7 @@ class GenericCliAdapter(BaseAdapter):
 
     def fetch_events(self, session: SessionHandle) -> list[AdapterEvent]:
         proc: subprocess.Popen = session.meta["proc"]
-        wait_seconds = float(self.config.get("response_wait_seconds", 5))
+        wait_seconds = float(self.config.get("response_wait_seconds", _settings.cli_response_wait_seconds))
         fd = proc.stdout.fileno()  # type: ignore[union-attr]
         lines: list[str] = []
         # 先等待首行数据,之后连续读到无数据为止
@@ -139,7 +143,7 @@ class GenericCliAdapter(BaseAdapter):
             if not chunk:
                 break
             lines.extend(chunk.splitlines())
-            ready = select.select([fd], [], [], 0.3)[0]
+            ready = select.select([fd], [], [], _settings.cli_read_interval_seconds)[0]
         events: list[AdapterEvent] = [AdapterEvent("message", {"role": "agent", "content": line})
                                       for line in lines if line.strip()]
         if proc.poll() is not None:
@@ -151,7 +155,7 @@ class GenericCliAdapter(BaseAdapter):
         if proc and proc.poll() is None:
             proc.terminate()
             try:
-                proc.wait(timeout=5)
+                proc.wait(timeout=_settings.terminate_wait_timeout_seconds)
             except subprocess.TimeoutExpired:
                 proc.kill()
         session.meta.clear()
@@ -212,7 +216,7 @@ class HttpApiAdapter(BaseAdapter):
         req.add_header("Content-Type", "application/json")
         for k, v in self._auth_headers().items():
             req.add_header(k, v)
-        timeout = float(self.config.get("request_timeout", 120))
+        timeout = float(self.config.get("request_timeout", _settings.http_adapter_timeout_seconds))
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
                 raw = resp.read().decode("utf-8", errors="replace")
@@ -422,7 +426,8 @@ class QoderCliAdapter(BaseAdapter):
         try:
             proc = subprocess.run(  # noqa: S603
                 [binary, "--version"], cwd=workdir or None,
-                capture_output=True, text=True, timeout=30, check=False,
+                capture_output=True, text=True,
+                timeout=_settings.smoke_timeout_seconds, check=False,
             )
         except FileNotFoundError as exc:
             raise RuntimeError(
@@ -504,7 +509,7 @@ class QoderCliAdapter(BaseAdapter):
         if proc and proc.poll() is None:
             proc.terminate()
             try:
-                proc.wait(timeout=5)
+                proc.wait(timeout=_settings.terminate_wait_timeout_seconds)
             except subprocess.TimeoutExpired:
                 proc.kill()
         session.meta.clear()
